@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NYC STREET PRO | CLOUD SYNC</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;700&family=Noto+Sans+TC:wght@400;700&display=swap');
+
+:root {
+--nyc-yellow: #FCCC0A;
+--nyc-dark: #0A0A0A;
+}
+
+body {
+font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif;
+background-color: var(--nyc-dark);
+color: #EEEEEE;
+-webkit-tap-highlight-color: transparent;
+overscroll-behavior-y: contain;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.street-card {
+background: #151515;
+border: 1px solid rgba(255, 255, 255, 0.05);
+border-radius: 28px;
+transition: all 0.2s ease;
+}
+
+.photo-frame {
+position: relative;
+height: 220px;
+border-radius: 32px;
+overflow: hidden;
+background-color: #1a1a1a;
+border: 1px solid rgba(255, 255, 255, 0.1);
+cursor: pointer;
+}
+
+.photo-frame img {
+width: 100%;
+height: 100%;
+object-fit: cover;
+transition: transform 0.5s ease;
+}
+
+.date-item {
+min-width: 80px;
+height: 100px;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+border-radius: 24px;
+background: #151515;
+border: 1px solid rgba(255, 255, 255, 0.05);
+transition: all 0.3s ease;
+}
+
+.date-item.active {
+background: var(--nyc-yellow);
+color: black;
+box-shadow: 0 8px 15px rgba(252, 204, 10, 0.15);
+}
+
+.flight-line {
+position: relative;
+height: 1px;
+background: rgba(255,255,255,0.1);
+width: 100%;
+}
+
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.modal-enter-active, .modal-leave-active { transition: opacity 0.3s ease; }
+.modal-enter-from, .modal-leave-to { opacity: 0; }
+.modal-content-enter-active { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+.sync-status {
+position: fixed;
+top: 10px;
+left: 50%;
+transform: translateX(-50%);
+z-index: 100;
+font-size: 8px;
+letter-spacing: 0.2em;
+background: rgba(252, 204, 10, 0.2);
+padding: 2px 10px;
+border-radius: 20px;
+color: var(--nyc-yellow);
+}
+</style>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+</head>
+<body class="overflow-hidden">
+<div id="app" class="max-w-md mx-auto h-screen flex flex-col relative bg-[#0A0A0A] shadow-2xl overflow-hidden">
+
+<div v-if="isSyncing" class="sync-status uppercase font-bold">Cloud Syncing...</div>
+
+<!-- Header -->
+<header class="px-6 pt-12 pb-4 flex justify-between items-center z-10 bg-black/50 backdrop-blur-lg sticky top-0">
+<div>
+<h1 class="text-2xl font-black italic tracking-tighter uppercase">NYC <span class="text-yellow-400">2026</span></h1>
+<p class="text-[10px] text-white/30 font-bold tracking-[0.2em] uppercase">{{ activeTabName }}</p>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-black text-white/20 uppercase tracking-widest italic">Y & K Adventure</span>
+</div>
+</header>
+
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto px-6 pb-32 no-scrollbar">
+
+<!-- HOME -->
+<section v-if="activeTab === 'home'" class="space-y-6 animate-fade-in">
+<div @click="triggerFileUpload" class="photo-frame shadow-2xl mt-2 group relative">
+<img :src="coverPhoto" alt="NYC Cover">
+<div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
+<div class="absolute top-4 right-4 bg-black/40 backdrop-blur-md p-2 rounded-full border border-white/10">
+<i class="fas fa-camera text-white/80 text-xs"></i>
+</div>
+<div class="absolute bottom-6 left-6">
+<h2 class="text-xl font-black italic text-white uppercase tracking-tight">Yoann & Karen</h2>
+<div class="flex items-center gap-2 mt-1">
+<span class="bg-yellow-400 text-black text-[9px] font-black px-2 py-0.5 rounded italic uppercase">Jan 16 - 20</span>
+<span class="text-white/60 text-[10px] font-bold">{{ countdownDays }} Days Left</span>
+</div>
+</div>
+<input type="file" ref="fileInput" @change="handleFileUpload" accept="image/*" class="hidden">
+</div>
+
+<div class="space-y-3">
+<h3 class="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] pl-1 text-center">Flight Board</h3>
+<div class="street-card p-5 border-l-4 border-yellow-400">
+<div class="flex justify-between items-center mb-4 text-[9px] font-black text-white/30 uppercase tracking-widest">
+<span>United UA1284</span>
+<span>Friday, Jan 16</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="text-center">
+<p class="text-2xl font-black">PHX</p>
+<p class="text-[10px] font-bold text-white/40 mt-1">12:28 AM</p>
+</div>
+<div class="flex-1 px-4 text-center">
+<div class="flight-line flex justify-center items-center">
+<i class="fas fa-plane text-[10px] text-yellow-400"></i>
+</div>
+<p class="text-[8px] font-bold text-white/20 mt-2 uppercase">5h 32m Non-stop</p>
+</div>
+<div class="text-center">
+<p class="text-2xl font-black text-yellow-400">EWR</p>
+<p class="text-[10px] font-bold text-white/40 mt-1">07:00 AM</p>
+</div>
+</div>
+</div>
+</div>
+
+<div class="space-y-3 pb-4">
+<h3 class="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] pl-1">Basecamp</h3>
+<div @click="openMap('230 E 51st St, New York')" class="street-card p-5">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="text-lg font-black italic text-white/90">POD 51 HOTEL</h4>
+<p class="text-[10px] text-white/30 uppercase font-bold mt-1">Midtown Manhattan</p>
+</div>
+<i class="fas fa-map-marked-alt text-yellow-400"></i>
+</div>
+<div class="mt-4 pt-4 border-t border-white/5 flex justify-between items-end">
+<div>
+<p class="text-[9px] text-white/20 uppercase font-black">Confirmation</p>
+<p class="text-sm font-mono font-bold text-yellow-400 tracking-wider">H-WCSF7M99XZQQ</p>
+</div>
+<span class="text-[9px] font-black italic text-white/20 underline uppercase">View Map</span>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ITINERARY -->
+<section v-if="activeTab === 'itinerary'" class="space-y-6 animate-fade-in pt-2">
+<div class="flex overflow-x-auto gap-3 pb-2 no-scrollbar -mx-6 px-6">
+<div v-for="(day, idx) in itinerary" :key="idx"
+@click="selectedDayIdx = idx"
+:class="['date-item', selectedDayIdx === idx ? 'active' : 'text-white/20']">
+<span class="text-[9px] font-black uppercase mb-1 tracking-tighter">{{ day.weekday }}</span>
+<span class="text-2xl font-black mb-1">{{ day.date.split('-')[2] }}</span>
+<i :class="day.weatherIcon" class="text-[10px] opacity-50"></i>
+</div>
+</div>
+
+<div class="flex justify-between items-end">
+<div>
+<h2 class="text-2xl font-black italic uppercase text-yellow-400">{{ itinerary[selectedDayIdx].label }}</h2>
+<p class="text-[10px] text-white/20 font-bold uppercase tracking-widest mt-1">{{ itinerary[selectedDayIdx].date }}</p>
+</div>
+<button @click="openEventModal" class="bg-yellow-400 text-black px-5 py-2 rounded-full text-[10px] font-black uppercase">Add +</button>
+</div>
+
+<div class="space-y-4">
+<div v-for="(event, eIdx) in itinerary[selectedDayIdx].events" :key="eIdx" class="street-card p-5 border-l-4 border-yellow-400">
+<div class="flex justify-between items-start">
+<span class="text-[10px] font-mono font-bold text-yellow-400">{{ event.time }}</span>
+<button @click="deleteEvent(eIdx)" class="text-white/10"><i class="fas fa-times"></i></button>
+</div>
+<h4 class="text-lg font-bold mt-1 text-white/90 uppercase">{{ event.location }}</h4>
+<div class="flex justify-between items-center mt-4">
+<span class="text-[9px] text-white/20 font-black uppercase tracking-widest">{{ event.duration }}</span>
+<button @click="openMap(event.location)" class="text-[10px] font-black italic text-yellow-400">NAVIGATE ></button>
+</div>
+</div>
+<div v-if="itinerary[selectedDayIdx].events.length === 0" class="text-center py-12 text-white/10 italic text-sm">今日暫無排定行程</div>
+</div>
+</section>
+
+<!-- BUCKET LIST -->
+<section v-if="activeTab === 'bucket'" class="space-y-6 animate-fade-in pt-2">
+<div class="street-card p-6 bg-gradient-to-br from-[#1A1A1A] to-[#111111] border-yellow-400/20">
+<h3 class="text-[10px] font-black text-yellow-400 uppercase tracking-[0.4em] mb-4 text-center">New Inspiration</h3>
+<input v-model="bucketQuickName" @keyup.enter="quickAddBucket" placeholder="快速新增景點..." class="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm text-white focus:ring-1 focus:ring-yellow-400 outline-none mb-3">
+<button @click="quickAddBucket" class="w-full bg-yellow-400 text-black py-4 rounded-2xl font-black uppercase text-xs">Quick Add</button>
+</div>
+
+<div class="space-y-3">
+<h3 class="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] pl-1">NYC Collections</h3>
+<div v-for="(item, bIdx) in bucketList" :key="bIdx" class="street-card p-5 flex justify-between items-center">
+<div @click="openEditBucketModal(bIdx)" class="flex-1 cursor-pointer pr-4">
+<h4 class="font-black text-sm uppercase tracking-tight text-white/90 truncate">{{ item.name }}</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="text-[9px] text-yellow-400/80 font-black uppercase bg-yellow-400/5 px-1.5 py-0.5 rounded">{{ item.category }}</span>
+<span v-if="item.notes" class="text-[9px] text-white/20 font-bold uppercase truncate max-w-[100px]">{{ item.notes }}</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button @click="openMap(item.link || item.name)" class="text-white/30"><i class="fas fa-location-arrow text-sm"></i></button>
+<button @click="deleteBucket(bIdx)" class="text-white/10"><i class="fas fa-trash-alt text-sm"></i></button>
+</div>
+</div>
+</div>
+</section>
+
+<!-- EXPENSE -->
+<section v-if="activeTab === 'expense'" class="space-y-6 animate-fade-in pt-2">
+<div class="bg-white text-black rounded-[32px] p-8 shadow-2xl">
+<p class="text-[10px] font-black uppercase tracking-widest opacity-40">Settlement</p>
+<h2 class="text-2xl font-black mt-1 uppercase italic tracking-tighter">{{ settlement.message }}</h2>
+<div class="mt-8 flex justify-between border-t border-black/5 pt-4">
+<div><p class="text-[9px] font-bold opacity-30 uppercase">Total</p><p class="text-xl font-bold font-mono">${{ totalExpense.toFixed(2) }}</p></div>
+<div class="text-right"><p class="text-[9px] font-bold opacity-30 uppercase">Split</p><p class="text-xl font-bold font-mono text-yellow-600">${{ (totalExpense/2).toFixed(2) }}</p></div>
+</div>
+</div>
+
+<div class="street-card p-6">
+<div class="grid grid-cols-2 gap-2 mb-4">
+<button @click="newExp.payer = 'Yoann'" :class="newExp.payer === 'Yoann' ? 'bg-yellow-400 text-black' : 'bg-white/5 text-white/20'" class="py-3 rounded-xl text-[10px] font-black uppercase">Yoann Paid</button>
+<button @click="newExp.payer = 'Karen'" :class="newExp.payer === 'Karen' ? 'bg-yellow-400 text-black' : 'bg-white/5 text-white/20'" class="py-3 rounded-xl text-[10px] font-black uppercase">Karen Paid</button>
+</div>
+<input v-model="newExp.desc" placeholder="項目內容" class="w-full bg-black/40 border border-white/5 p-4 rounded-2xl mb-3 text-sm outline-none text-white">
+<div class="flex gap-2">
+<input v-model.number="newExp.amount" type="number" placeholder="金額" class="flex-1 bg-black/40 border border-white/5 p-4 rounded-2xl text-sm outline-none text-white">
+<button @click="addExpense" class="bg-white text-black px-8 rounded-2xl font-black text-[10px] uppercase">ADD</button>
+</div>
+</div>
+
+<div class="space-y-3 pb-10">
+<div v-for="(exp, idx) in expenses" :key="idx" class="street-card p-4 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black uppercase text-yellow-400">{{ exp.payer[0] }}</div>
+<div>
+<p class="font-bold text-sm text-white/80 uppercase">{{ exp.desc }}</p>
+<p class="text-[9px] text-white/20 font-black uppercase tracking-widest">{{ exp.payer }} paid</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-bold font-mono text-white/90">${{ exp.amount.toFixed(2) }}</p>
+<button @click="removeExpense(idx)" class="text-[9px] text-red-500/50 uppercase font-black">Del</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+
+<!-- Tab Bar -->
+<nav class="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/5 px-6 pt-4 pb-10 z-50">
+<div class="max-w-md mx-auto flex justify-between items-center">
+<button v-for="tab in ['home', 'itinerary', 'bucket', 'expense']" :key="tab" @click="activeTab = tab" :class="['flex flex-col items-center gap-1 w-1/4', activeTab === tab ? 'text-yellow-400' : 'text-white/20']">
+<i :class="getTabIcon(tab)" class="text-xl"></i>
+<span class="text-[8px] font-black uppercase tracking-[0.2em]">{{ tab }}</span>
+</button>
+</div>
+</nav>
+
+<!-- MODALS -->
+<transition name="modal">
+<div v-if="editBucketModal.show" class="fixed inset-0 bg-black/90 z-[110] flex items-end p-4 backdrop-blur-md">
+<div class="bg-[#151515] w-full rounded-[2.5rem] p-8 border border-white/10 modal-content-enter-active">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-xl font-black italic text-yellow-400 uppercase">Edit Spot</h3>
+<button @click="editBucketModal.show = false" class="text-white/20"><i class="fas fa-times"></i></button>
+</div>
+<div class="space-y-4 text-left">
+<input v-model="editBucketModal.data.name" placeholder="地點名稱" class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm font-bold text-white outline-none">
+<select v-model="editBucketModal.data.category" class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm font-bold text-white outline-none">
+<option value="Food 美食">Food 美食</option>
+<option value="Views 景點">Views 景點</option>
+<option value="Photo 拍照">Photo 拍照</option>
+<option value="Walk 散步">Walk 散步</option>
+</select>
+<input v-model="editBucketModal.data.link" placeholder="Google Map 連結" class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm text-white outline-none">
+<input v-model="editBucketModal.data.notes" placeholder="備註/營業時間" class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm text-white outline-none">
+<button @click="saveBucketEdit" class="w-full py-4 bg-yellow-400 text-black rounded-2xl font-black uppercase text-xs mt-4">Save Changes</button>
+</div>
+</div>
+</div>
+</transition>
+
+<transition name="modal">
+<div v-if="eventModal.show" class="fixed inset-0 bg-black/90 z-[100] flex items-end p-4 backdrop-blur-sm">
+<div class="bg-[#151515] w-full rounded-[2.5rem] p-8 border border-white/10 modal-content-enter-active text-left">
+<h3 class="text-xl font-black italic text-yellow-400 uppercase mb-6">Add Route</h3>
+<div class="space-y-4">
+<select v-model="eventModal.bucketSelect" @change="pickFromBucket" class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm text-white outline-none">
+<option value="" disabled>-- 從收藏夾選擇 --</option>
+<option v-for="(item, idx) in bucketList" :key="idx" :value="item">{{ item.name }}</option>
+</select>
+<div class="grid grid-cols-2 gap-4">
+<input v-model="eventModal.time" type="time" class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-white outline-none font-mono">
+<input v-model="eventModal.duration" placeholder="預計時長 (2h)" class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm outline-none text-white">
+</div>
+<input v-model="eventModal.location" placeholder="地點名稱" class="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-sm text-white outline-none font-bold uppercase">
+<div class="flex gap-4 pt-4">
+<button @click="eventModal.show = false" class="flex-1 py-4 text-white/20 font-black uppercase text-xs">Cancel</button>
+<button @click="saveEvent" class="flex-2 px-10 py-4 bg-yellow-400 text-black rounded-2xl font-black uppercase text-xs">Confirm</button>
+</div>
+</div>
+</div>
+</div>
+</transition>
+</div>
+
+<script type="module">
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js");
+  });
+}
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBatbIZ29KXiMLWduOW1JqPacg44l_NWg0",
+  authDomain: "nyutrip.firebaseapp.com",
+  projectId: "nyutrip",
+  storageBucket: "nyutrip.firebasestorage.app",
+  messagingSenderId: "209610443638",
+  appId: "1:209610443638:web:796d2cd271b50394ef0857",
+  measurementId: "G-VDH0MHBFQ4"
+};
+const appId = "nyc-street-pro-2026";
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'nyc-street-pro-2026';
+
+const { createApp, ref, computed, onMounted, watch } = Vue;
+
+createApp({
+setup() {
+const activeTab = ref('home');
+const selectedDayIdx = ref(0);
+const bucketQuickName = ref('');
+const fileInput = ref(null);
+const isSyncing = ref(false);
+const user = ref(null);
+
+// --- Shared Cloud Data ---
+const coverPhoto = ref("https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?q=80&w=1000&auto=format&fit=crop");
+const itinerary = ref([
+{ date: '2026-01-16', weekday: 'FRI', label: 'THE ARRIVAL', weatherIcon: 'fas fa-snowflake', events: [] },
+{ date: '2026-01-17', weekday: 'SAT', label: 'MIDTOWN BEATS', weatherIcon: 'fas fa-cloud', events: [] },
+{ date: '2026-01-18', weekday: 'SUN', label: 'DOWNTOWN ART', weatherIcon: 'fas fa-cloud-sun', events: [] },
+{ date: '2026-01-19', weekday: 'MON', label: 'BROOKLYN VIBES', weatherIcon: 'fas fa-sun', events: [] },
+{ date: '2026-01-20', weekday: 'TUE', label: 'FINAL ROUND', weatherIcon: 'fas fa-wind', events: [] }
+]);
+const bucketList = ref([]);
+const expenses = ref([]);
+
+// --- Local UI Data ---
+const newExp = ref({ desc: '', amount: null, payer: 'Yoann' });
+const eventModal = ref({ show: false, time: '12:00', location: '', duration: '', bucketSelect: null });
+const editBucketModal = ref({ show: false, index: -1, data: { name: '', category: '', link: '', notes: '' } });
+
+// --- Cloud Persistence (Firestore) ---
+const syncToCloud = async () => {
+if (!user.value) return;
+isSyncing.value = true;
+try {
+const docRef = doc(db, 'artifacts', appId, 'public', 'data');
+await setDoc(docRef, {
+coverPhoto: coverPhoto.value,
+itinerary: itinerary.value,
+bucketList: bucketList.value,
+expenses: expenses.value,
+lastUpdated: new Date().getTime()
+}, { merge: true });
+} catch (e) {
+console.error("Sync error:", e);
+} finally {
+setTimeout(() => isSyncing.value = false, 1000);
+}
+};
+
+// --- Auth Setup ---
+onMounted(async () => {
+const initAuth = async () => {
+await signInAnonymously(auth);
+};
+await initAuth();
+onAuthStateChanged(auth, (u) => {
+user.value = u;
+if (u) {
+// Listen to changes
+const docRef = doc(db, 'artifacts', appId, 'public', 'data');
+onSnapshot(docRef, (docSnap) => {
+if (docSnap.exists()) {
+const data = docSnap.data();
+coverPhoto.value = data.coverPhoto || coverPhoto.value;
+itinerary.value = data.itinerary || itinerary.value;
+bucketList.value = data.bucketList || [];
+expenses.value = data.expenses || [];
+} else {
+// First time setup
+syncToCloud();
+}
+}, (err) => console.error("Snapshot error:", err));
+}
+});
+});
+
+// --- Methods ---
+const triggerFileUpload = () => fileInput.value.click();
+const handleFileUpload = (event) => {
+const file = event.target.files[0];
+if (file) {
+const reader = new FileReader();
+reader.onload = (e) => {
+coverPhoto.value = e.target.result;
+syncToCloud();
+};
+reader.readAsDataURL(file);
+}
+};
+
+const quickAddBucket = () => {
+if (!bucketQuickName.value) return;
+bucketList.value.unshift({ name: bucketQuickName.value, category: 'Explore 探索', link: '', notes: '' });
+bucketQuickName.value = '';
+syncToCloud();
+};
+
+const saveBucketEdit = () => {
+if (editBucketModal.value.index > -1) {
+bucketList.value[editBucketModal.value.index] = { ...editBucketModal.value.data };
+editBucketModal.value.show = false;
+syncToCloud();
+}
+};
+
+const saveEvent = () => {
+if (!eventModal.value.location) return;
+itinerary.value[selectedDayIdx.value].events.push({
+time: eventModal.value.time,
+location: eventModal.value.location,
+duration: eventModal.value.duration
+});
+itinerary.value[selectedDayIdx.value].events.sort((a, b) => a.time.localeCompare(b.time));
+eventModal.value.show = false;
+syncToCloud();
+};
+
+const addExpense = () => {
+if (newExp.value.desc && newExp.value.amount) {
+expenses.value.unshift({ ...newExp.value });
+newExp.value.desc = '';
+newExp.value.amount = null;
+syncToCloud();
+}
+};
+
+// --- Computed ---
+const countdownDays = computed(() => {
+const diff = new Date('2026-01-16') - new Date();
+return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+});
+
+const totalExpense = computed(() => expenses.value.reduce((s, e) => s + (e.amount || 0), 0));
+const settlement = computed(() => {
+const y = expenses.value.filter(e => e.payer === 'Yoann').reduce((s, e) => s + (e.amount || 0), 0);
+const k = expenses.value.filter(e => e.payer === 'Karen').reduce((s, e) => s + (e.amount || 0), 0);
+const diff = (y - k) / 2;
+if (diff === 0) return { message: 'CLEARED 平帳' };
+return { message: diff > 0 ? `KAREN 欠 YOANN $${diff.toFixed(2)}` : `YOANN 欠 KAREN $${Math.abs(diff).toFixed(2)}` };
+});
+
+const activeTabName = computed(() => ({ home:'Street HQ', itinerary:'Route', bucket:'Collections', expense:'Wallet' }[activeTab.value]));
+const getTabIcon = (t) => ({ home:'fas fa-th-large', itinerary:'fas fa-route', bucket:'fas fa-star', expense:'fas fa-wallet' }[t]);
+
+return {
+activeTab, activeTabName, selectedDayIdx, countdownDays, coverPhoto, fileInput, isSyncing,
+itinerary, bucketList, bucketQuickName, expenses, newExp, settlement, totalExpense,
+eventModal, editBucketModal, getTabIcon, quickAddBucket,
+triggerFileUpload, handleFileUpload,
+openEditBucketModal: (i) => {
+editBucketModal.value.index = i;
+editBucketModal.value.data = { ...bucketList.value[i] };
+editBucketModal.value.show = true;
+},
+saveBucketEdit,
+openMap: (q) => {
+if (q && q.startsWith('http')) window.open(q, '_blank');
+else window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, '_blank');
+},
+openEventModal: () => eventModal.value = { show: true, time: '12:00', location: '', duration: '', bucketSelect: null },
+saveEvent,
+pickFromBucket: () => { if (eventModal.value.bucketSelect) { eventModal.value.location = eventModal.value.bucketSelect.name; eventModal.value.duration = '2h'; } },
+addExpense,
+deleteEvent: (i) => { itinerary.value[selectedDayIdx.value].events.splice(i, 1); syncToCloud(); },
+deleteBucket: (i) => { bucketList.value.splice(i, 1); syncToCloud(); },
+removeExpense: (i) => { expenses.value.splice(i, 1); syncToCloud(); }
+};
+}
+}).mount('#app');
+</script>
+</body>
+</html>
